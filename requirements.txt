@@ -1,4 +1,4 @@
 celery[redis]
 flask
 loguru
-
+python-dotenv
