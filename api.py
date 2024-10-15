@@ -47,6 +47,12 @@ def get_result(task_id):
     else:
         return jsonify({"status": "completed", "result": response})
 
-    
+
+@app.route("/hi", methods=["GET"])
+def say_hello():
+    logger.info("Received request to /hi endpoint")
+    return jsonify({"message": "Hello World"}), 200
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
