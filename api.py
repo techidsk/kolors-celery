@@ -1,8 +1,10 @@
 import os
+import threading
 
 from flask import Flask, jsonify, request
 from loguru import logger
 
+from jobs import schedule_task
 from tasks import get_task_result, process_task
 
 app = Flask(__name__)
@@ -28,6 +30,17 @@ logger.add(
 logger.info("API application started")
 
 
+# 创建一个新的线程来运行 schedule_task
+def run_schedule_task():
+    schedule_task()
+
+
+# 启动 schedule_task 的线程
+schedule_thread = threading.Thread(target=run_schedule_task)
+schedule_thread.daemon = True
+schedule_thread.start()
+
+
 @app.route("/create_task", methods=["POST"])
 def create_task():
     data = request.json
@@ -40,7 +53,7 @@ def create_task():
 def get_result(task_id):
     logger.info(f"Getting result for task ID: {task_id}")
     check_task = get_task_result.apply_async(args=[task_id], expires=60)
-    
+
     try:
         response = check_task.get(timeout=2)
         if response == "Task is still processing...":
