@@ -33,7 +33,7 @@ def create_task():
     data = request.json
     task = process_task.delay(data["payload"])
     logger.info(f"Task created with ID: {task.id}")
-    return jsonify({"task_id": task.id}), 202
+    return jsonify({"task_id": task.id, "status": "Task enqueued"}), 202
 
 
 @app.route("/get_result/<task_id>", methods=["GET"])
