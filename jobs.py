@@ -16,12 +16,12 @@ def schedule_task():
     # 设置目标URL
     target_url = "https://www.ziyouxiezuo.com/api/jobs"
 
-    # 设置任务每小时执行一次
-    schedule.every(5).minutes.do(send_get_request, url=target_url)
+    # # 设置任务每小时执行一次
+    # schedule.every(5).minutes.do(send_get_request, url=target_url)
 
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    # while True:
+    #     schedule.run_pending()
+    #     time.sleep(1)
 
 
 if __name__ == "__main__":
