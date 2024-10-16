@@ -39,13 +39,21 @@ def create_task():
 @app.route("/get_result/<task_id>", methods=["GET"])
 def get_result(task_id):
     logger.info(f"Getting result for task ID: {task_id}")
-    result = get_task_result.delay(task_id)
-    response = result.get(timeout=1)  # 等待1秒获取结果
-    if response == "Task is still processing...":
-        logger.info(f"Task {task_id} is still processing...")
-        return jsonify({"status": "pending"}), 202
-    else:
-        return jsonify({"status": "completed", "result": response})
+    check_task = get_task_result.apply_async(args=[task_id], expires=60)
+    
+    try:
+        response = check_task.get(timeout=2)
+        if response == "Task is still processing...":
+            logger.info(f"Task {task_id} is still processing...")
+            return jsonify({"status": "pending", "task_id": task_id}), 202
+        elif response == "Task failed":
+            logger.error(f"Task {task_id} failed")
+            return jsonify({"status": "failed", "task_id": task_id}), 500
+        else:
+            return jsonify({"status": "completed", "result": response}), 200
+    except TimeoutError:
+        logger.info(f"Timeout while checking task {task_id}")
+        return jsonify({"status": "pending", "task_id": task_id}), 202
 
 
 @app.route("/hi", methods=["GET"])
