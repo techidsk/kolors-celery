@@ -1,6 +1,7 @@
 import os
 import threading
 
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from flask import Flask, jsonify, request
 from loguru import logger
 
@@ -22,6 +23,8 @@ logger.add(
     rotation="10 MB",  # 当日志文件达到10MB时轮转
     retention="1 week",  # 保留最近一周的日志
     compression="zip",  # 压缩旧的日志文件
+    backtrace=True,
+    diagnose=True,
     level="INFO",  # 设置日志级别
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",  # 自定义日志格式
 )
@@ -51,22 +54,30 @@ def create_task():
 
 @app.route("/get_result/<task_id>", methods=["GET"])
 def get_result(task_id):
-    logger.info(f"Getting result for task ID: {task_id}")
-    check_task = get_task_result.apply_async(args=[task_id], expires=60)
-
     try:
-        response = check_task.get(timeout=2)
-        if response == "Task is still processing...":
-            logger.info(f"Task {task_id} is still processing...")
+        logger.info(f"Getting result for task ID: {task_id}")
+        check_task = get_task_result.apply_async(args=[task_id], expires=60)
+
+        try:
+            response = check_task.get(timeout=2)
+            if response == "Task is still processing...":
+                logger.info(f"Task {task_id} is still processing...")
+                return jsonify({"status": "pending", "task_id": task_id}), 202
+            elif response == "Task failed":
+                logger.error(f"Task {task_id} failed")
+                return jsonify({"status": "failed", "task_id": task_id}), 500
+            else:
+                return jsonify({"status": "completed", "result": response}), 200
+        except CeleryTimeoutError:
+            logger.info(f"Timeout while checking task {task_id}")
             return jsonify({"status": "pending", "task_id": task_id}), 202
-        elif response == "Task failed":
-            logger.error(f"Task {task_id} failed")
-            return jsonify({"status": "failed", "task_id": task_id}), 500
-        else:
-            return jsonify({"status": "completed", "result": response}), 200
-    except TimeoutError:
-        logger.info(f"Timeout while checking task {task_id}")
-        return jsonify({"status": "pending", "task_id": task_id}), 202
+        except Exception as e:
+            logger.error(f"Error while getting result for task {task_id}: {str(e)}")
+            return jsonify({"status": "error", "message": "An unexpected error occurred"}), 500
+
+    except Exception as e:
+        logger.error(f"Unexpected error in get_result for task {task_id}: {str(e)}")
+        return jsonify({"status": "error", "message": "An unexpected error occurred"}), 500
 
 
 @app.route("/hi", methods=["GET"])
