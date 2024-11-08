@@ -33,10 +33,21 @@ app = Celery(
     backend=f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:6379/0",
 )
 
+app.conf.update(
+    broker_connection_retry_on_startup=True,
+    broker_connection_max_retries=None,
+    task_track_started=True,
+    task_serializer='json',
+    result_serializer='json',
+    accept_content=['json']
+)
+
+# 添加这些日志来检查连接信息
+logger.info("Celery worker starting...")
 
 @app.task(name="tasks.process_task")
 def process_task(data):
-    # 创建一个新的异步任务来处理耗时操作
+    logger.info("Received process_task request")
     result = long_running_task.apply_async(args=[data])
     return result.id
 

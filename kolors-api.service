@@ -1,0 +1,15 @@
+[Unit]
+Description=Kolors Flask API Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/code/kolors-celery
+Environment="PATH=/root/code/kolors-celery/.venv/bin"
+ExecStart=/root/code/kolors-celery/.venv/bin/gunicorn -c /root/code/kolors-celery/gunicorn_config.py api:app
+Restart=always
+StandardOutput=append:/var/log/kolors-celery/service.log
+StandardError=append:/var/log/kolors-celery/service.error.log
+
+[Install]
+WantedBy=multi-user.target
