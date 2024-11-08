@@ -1,14 +1,19 @@
-import os
 import datetime
 import json
+import os
 from time import perf_counter
-import time
 
 from celery import Celery
+from celery.signals import (
+    task_postrun,
+    task_prerun,
+    worker_process_init,
+    worker_shutdown,
+    worker_shutting_down,
+)
 from dotenv import load_dotenv
 from loguru import logger
-
-from utils import get_openai_prompt, upload_image_to_oss, grpc_request
+from utils import get_openai_prompt, grpc_request, upload_image_to_oss
 
 logger.remove()
 logger.add(
@@ -37,13 +42,45 @@ app.conf.update(
     broker_connection_retry_on_startup=True,
     broker_connection_max_retries=None,
     task_track_started=True,
-    task_serializer='json',
-    result_serializer='json',
-    accept_content=['json']
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    # 设置任务软时间限制
+    task_soft_time_limit=3600,  # 1小时
+    # 设置任务硬时间限制
+    task_time_limit=3600 + 300,  # 1小时5分钟
+    # 设置优雅关闭超时
+    worker_shutdown_timeout=300,  # 5分钟
 )
 
 # 添加这些日志来检查连接信息
 logger.info("Celery worker starting...")
+
+
+@worker_process_init.connect
+def init_worker(**kwargs):
+    logger.info("Worker process initialized")
+
+
+@worker_shutting_down.connect
+def shutdown_worker(**kwargs):
+    logger.info("Worker shutting down...")
+
+
+@worker_shutdown.connect
+def shutdown_complete(**kwargs):
+    logger.info("Worker shutdown complete")
+
+
+@task_prerun.connect
+def task_prerun_handler(task_id, task, *args, **kwargs):
+    logger.info(f"Starting task {task.name}[{task_id}]")
+
+
+@task_postrun.connect
+def task_postrun_handler(task_id, task, *args, **kwargs):
+    logger.info(f"Completed task {task.name}[{task_id}]")
+
 
 @app.task(name="tasks.process_task")
 def process_task(data):
