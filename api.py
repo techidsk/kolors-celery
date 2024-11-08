@@ -1,12 +1,28 @@
 import os
 import threading
 
+from celery import Celery
 from celery.exceptions import TimeoutError as CeleryTimeoutError
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from loguru import logger
+from redis import Redis
 
 from jobs import schedule_task
 from tasks import get_task_result, process_task
+
+load_dotenv()
+
+# 从环境变量获取 Redis 密码
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD")
+REDIS_HOST = os.environ.get("REDIS_HOST")
+redis_client = Redis(host=REDIS_HOST, port=6379, db=0, password=REDIS_PASSWORD)
+
+celery_app = Celery(
+    "psy_api",
+    broker=f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:6379/0",
+    backend=f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:6379/0",
+)
 
 app = Flask(__name__)
 
@@ -73,17 +89,48 @@ def get_result(task_id):
             return jsonify({"status": "pending", "task_id": task_id}), 202
         except Exception as e:
             logger.error(f"Error while getting result for task {task_id}: {str(e)}")
-            return jsonify({"status": "error", "message": "An unexpected error occurred"}), 500
+            return (
+                jsonify({"status": "error", "message": "An unexpected error occurred"}),
+                500,
+            )
 
     except Exception as e:
         logger.error(f"Unexpected error in get_result for task {task_id}: {str(e)}")
-        return jsonify({"status": "error", "message": "An unexpected error occurred"}), 500
+        return (
+            jsonify({"status": "error", "message": "An unexpected error occurred"}),
+            500,
+        )
 
 
 @app.route("/hi", methods=["GET"])
 def say_hello():
     logger.info("Received request to /hi endpoint")
     return jsonify({"message": "Hello World"}), 200
+
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    try:
+        # 检查 Redis 连接
+        redis_client.ping()
+
+        # 检查 Celery 工作状态
+        i = celery_app.control.inspect()
+        active = i.active()
+
+        return (
+            jsonify(
+                {
+                    "status": "healthy",
+                    "redis": "connected",
+                    "celery_workers": active is not None,
+                    "active_tasks": active,
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "error": str(e)}), 500
 
 
 if __name__ == "__main__":
