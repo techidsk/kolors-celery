@@ -1,0 +1,44 @@
+# ============================================
+# Systemd 配置文件 - Celery Worker
+# 部署: sudo cp kolors-worker.service /etc/systemd/system/
+# 启动: sudo systemctl daemon-reload && sudo systemctl enable --now kolors-worker
+# 查看日志: journalctl -u kolors-worker -f
+# ============================================
+
+[Unit]
+Description=Kolors Celery Worker (GPU Image Generation)
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/code/kolors-celery
+Environment="PATH=/root/code/kolors-celery/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# 关键参数: --concurrency=1 确保单 GPU 单任务
+ExecStart=/root/code/kolors-celery/.venv/bin/celery -A local_worker worker \
+    --loglevel=info \
+    --concurrency=1 \
+    --prefetch-multiplier=1 \
+    --hostname=kolors-worker@%%h
+
+# 优雅关闭配置 (等待当前任务完成)
+ExecStop=/bin/kill -s TERM $MAINPID
+TimeoutStopSec=330
+KillMode=mixed
+KillSignal=SIGTERM
+
+# 自动重启
+Restart=on-failure
+RestartSec=10
+
+# 资源限制 (GPU 服务器建议)
+LimitNOFILE=65536
+
+# 日志
+StandardOutput=append:/var/log/kolors-celery/worker.log
+StandardError=append:/var/log/kolors-celery/worker.error.log
+
+[Install]
+WantedBy=multi-user.target

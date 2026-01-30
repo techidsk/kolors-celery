@@ -9,7 +9,7 @@ from loguru import logger
 from redis import Redis
 
 from jobs import schedule_task
-from tasks import get_task_result, process_task
+from tasks import process_task
 
 load_dotenv()
 
@@ -70,29 +70,40 @@ def create_task():
 
 @app.route("/get_result/<task_id>", methods=["GET"])
 def get_result(task_id):
+    """直接查询任务结果，不创建新任务"""
     try:
         logger.info(f"Getting result for task ID: {task_id}")
-        check_task = get_task_result.apply_async(args=[task_id], expires=60)
-
-        try:
-            response = check_task.get(timeout=2)
-            if response == "Task is still processing...":
-                logger.info(f"Task {task_id} is still processing...")
-                return jsonify({"status": "pending", "task_id": task_id}), 202
-            elif response == "Task failed":
-                logger.error(f"Task {task_id} failed")
-                return jsonify({"status": "failed", "task_id": task_id}), 500
-            else:
-                return jsonify({"status": "completed", "result": response}), 200
-        except CeleryTimeoutError:
-            logger.info(f"Timeout while checking task {task_id}")
+        
+        # 直接用 AsyncResult 查询，不需要创建新的 Celery 任务
+        result = celery_app.AsyncResult(task_id)
+        
+        if result.state == "PENDING":
+            # 任务还在队列中等待
             return jsonify({"status": "pending", "task_id": task_id}), 202
-        except Exception as e:
-            logger.error(f"Error while getting result for task {task_id}: {str(e)}")
-            return (
-                jsonify({"status": "error", "message": "An unexpected error occurred"}),
-                500,
-            )
+        
+        elif result.state == "STARTED":
+            # 任务正在执行中
+            return jsonify({"status": "processing", "task_id": task_id}), 202
+        
+        elif result.state == "SUCCESS":
+            # 任务完成
+            return jsonify({"status": "completed", "result": result.result}), 200
+        
+        elif result.state == "FAILURE":
+            # 任务失败
+            logger.error(f"Task {task_id} failed: {result.result}")
+            return jsonify({
+                "status": "failed",
+                "task_id": task_id,
+                "error": str(result.result)
+            }), 500
+        
+        else:
+            # 其他状态（RETRY, REVOKED 等）
+            return jsonify({
+                "status": result.state.lower(),
+                "task_id": task_id
+            }), 202
 
     except Exception as e:
         logger.error(f"Unexpected error in get_result for task {task_id}: {str(e)}")

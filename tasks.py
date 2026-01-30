@@ -25,11 +25,4 @@ def process_task(data):
     return result
 
 
-@app.task
-def get_task_result(task_id):
-    # 获取任务结果
-    result = app.AsyncResult(task_id)
-    if result.ready():
-        return result.result
-    else:
-        return "Task is still processing..."
+# get_task_result 已移除，改用 api.py 中的 AsyncResult 直接查询
