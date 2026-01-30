@@ -176,7 +176,7 @@ def process_task(self, data):
 
         last_prompt1 = ""
         if len(data["user_prompts"]) > 1:
-            last_prompt1 = data["user_prompts"][1].get("generate_prompt", "")
+            last_prompt1 = data["user_prompts"][1].get("generate_prompt") or ""
         prompt_gpt = prompt_gpt.replace("{last1}", last_prompt1)
         prompt_gpt = prompt_gpt.replace("{my_info}", f"性别为{gender},年龄在{ages}左右.")
 
